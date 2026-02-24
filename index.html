@@ -618,7 +618,7 @@ durInput.addEventListener('keydown', e => { if (e.key === 'Enter') durInput.blur
 durDown.addEventListener('click', () => applyDuration(customDurations[mode] - 1));
 durUp.addEventListener('click', () => applyDuration(customDurations[mode] + 1));
 
-
+startBtn.addEventListener('click', () => {
   if (running) {
     clearInterval(interval);
     running = false;
