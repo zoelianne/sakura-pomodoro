@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pomodoro</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@200;300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg1: #c9a99c;
+    --bg2: #b89bb4;
+    --bg3: #8b7280;
+    --card: rgba(255,248,245,0.22);
+    --card-border: rgba(255,240,235,0.35);
+    --text: #3d2b2b;
+    --text-light: rgba(61,43,43,0.6);
+    --accent: #9b6b7a;
+    --ring-bg: rgba(255,240,235,0.18);
+    --ring-fill: rgba(155,107,122,0.85);
+    --break-accent: #7a6b9b;
+    --shadow: rgba(100,60,70,0.18);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Jost', sans-serif;
+    background: linear-gradient(135deg, var(--bg1) 0%, var(--bg2) 50%, var(--bg3) 100%);
+    background-attachment: fixed;
+    overflow: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.5;
+    z-index: 0;
+  }
+
+  /* Floating blobs */
+  .blob {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .blob1 {
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, #e8c4be 0%, transparent 70%);
+    top: -100px; left: -100px;
+    animation: drift1 18s ease-in-out infinite;
+  }
+  .blob2 {
+    width: 350px; height: 350px;
+    background: radial-gradient(circle, #c4b8d8 0%, transparent 70%);
+    bottom: -80px; right: -80px;
+    animation: drift2 22s ease-in-out infinite;
+  }
+  .blob3 {
+    width: 250px; height: 250px;
+    background: radial-gradient(circle, #d4a0b0 0%, transparent 70%);
+    top: 50%; left: 60%;
+    animation: drift3 16s ease-in-out infinite;
+  }
+
+  @keyframes drift1 {
+    0%, 100% { transform: translate(0,0); }
+    50% { transform: translate(40px, 30px); }
+  }
+  @keyframes drift2 {
+    0%, 100% { transform: translate(0,0); }
+    50% { transform: translate(-30px, -40px); }
+  }
+  @keyframes drift3 {
+    0%, 100% { transform: translate(0,0); }
+    50% { transform: translate(-20px, 25px); }
+  }
+
+  /* Main card */
+  .card {
+    position: relative;
+    z-index: 1;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 28px;
+    padding: 48px 56px;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow:
+      0 8px 32px var(--shadow),
+      inset 0 1px 0 rgba(255,255,255,0.3);
+    text-align: center;
+    min-width: 360px;
+    animation: fadeIn 0.8s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Mode tabs */
+  .modes {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin-bottom: 36px;
+    background: rgba(255,240,235,0.12);
+    border-radius: 50px;
+    padding: 4px;
+    border: 1px solid var(--card-border);
+  }
+
+  .mode-btn {
+    background: none;
+    border: none;
+    padding: 6px 18px;
+    border-radius: 50px;
+    font-family: 'Jost', sans-serif;
+    font-size: 11px;
+    font-weight: 300;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    color: var(--text-light);
+    transition: all 0.25s ease;
+  }
+
+  .mode-btn.active {
+    background: rgba(255,248,245,0.45);
+    color: var(--text);
+    box-shadow: 0 2px 8px rgba(100,60,70,0.12);
+  }
+
+  .mode-btn:hover:not(.active) {
+    color: var(--text);
+  }
+
+  /* Label */
+  .session-label {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 14px;
+    letter-spacing: 0.06em;
+    color: var(--text-light);
+    margin-bottom: 10px;
+    min-height: 20px;
+    transition: opacity 0.3s;
+  }
+
+  /* SVG ring timer */
+  .ring-wrap {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    margin: 0 auto 32px;
+  }
+
+  .ring-wrap svg {
+    transform: rotate(-90deg);
+  }
+
+  .ring-bg-circle {
+    fill: none;
+    stroke: var(--ring-bg);
+    stroke-width: 6;
+  }
+
+  .ring-fill-circle {
+    fill: none;
+    stroke: var(--ring-fill);
+    stroke-width: 6;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s linear, stroke 0.4s ease;
+    filter: drop-shadow(0 0 6px rgba(155,107,122,0.5));
+  }
+
+  /* Time display */
+  .time-display {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .time {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 52px;
+    font-weight: 300;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    line-height: 1;
+    transition: color 0.4s;
+  }
+
+  .session-count {
+    font-size: 10px;
+    font-weight: 300;
+    letter-spacing: 0.15em;
+    color: var(--text-light);
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .btn-main {
+    background: linear-gradient(135deg, rgba(155,107,122,0.8), rgba(122,107,155,0.7));
+    border: 1px solid rgba(255,240,235,0.3);
+    color: #fff8f5;
+    border-radius: 50px;
+    padding: 12px 40px;
+    font-family: 'Jost', sans-serif;
+    font-size: 12px;
+    font-weight: 300;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 16px rgba(100,60,70,0.2);
+  }
+
+  .btn-main:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(100,60,70,0.28);
+    background: linear-gradient(135deg, rgba(155,107,122,0.95), rgba(122,107,155,0.85));
+  }
+
+  .btn-main:active {
+    transform: translateY(0);
+  }
+
+  .btn-icon {
+    background: rgba(255,240,235,0.18);
+    border: 1px solid var(--card-border);
+    color: var(--text-light);
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  }
+
+  .btn-icon:hover {
+    background: rgba(255,240,235,0.3);
+    color: var(--text);
+  }
+
+  /* Session dots */
+  .session-dots {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,240,235,0.25);
+    border: 1px solid rgba(255,240,235,0.35);
+    transition: all 0.3s ease;
+  }
+
+  .dot.filled {
+    background: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 6px rgba(155,107,122,0.5);
+  }
+
+  /* Quote */
+  .quote {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 12px;
+    color: var(--text-light);
+    letter-spacing: 0.04em;
+    line-height: 1.6;
+    opacity: 0.8;
+    min-height: 38px;
+    transition: opacity 0.5s;
+  }
+
+  /* Break mode ring color */
+  body.break-mode .ring-fill-circle {
+    stroke: rgba(122,107,155,0.85);
+    filter: drop-shadow(0 0 6px rgba(122,107,155,0.5));
+  }
+
+  body.break-mode .btn-main {
+    background: linear-gradient(135deg, rgba(107,122,155,0.8), rgba(155,107,122,0.7));
+  }
+
+  /* Pulse animation when running */
+  @keyframes pulse-ring {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  body.running .ring-fill-circle {
+    animation: pulse-ring 2s ease-in-out infinite;
+  }
+
+  /* Ding animation */
+  @keyframes ding {
+    0% { transform: scale(1); }
+    25% { transform: scale(1.04); }
+    50% { transform: scale(0.97); }
+    75% { transform: scale(1.02); }
+    100% { transform: scale(1); }
+  }
+
+  .card.ding {
+    animation: ding 0.5s ease;
+  }
+
+  /* Duration editor */
+  .duration-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .duration-label {
+    font-size: 10px;
+    font-weight: 300;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-light);
+  }
+
+  .duration-editor {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,240,235,0.14);
+    border: 1px solid var(--card-border);
+    border-radius: 50px;
+    padding: 5px 10px;
+  }
+
+  .dur-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-light);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+    transition: color 0.2s;
+    font-family: 'Jost', sans-serif;
+  }
+
+  .dur-btn:hover { color: var(--text); }
+
+  .dur-input {
+    background: none;
+    border: none;
+    text-align: center;
+    width: 36px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 18px;
+    font-weight: 300;
+    color: var(--text);
+    outline: none;
+    -moz-appearance: textfield;
+  }
+
+  .dur-input::-webkit-inner-spin-button,
+  .dur-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+  .dur-min {
+    font-size: 10px;
+    font-weight: 300;
+    letter-spacing: 0.1em;
+    color: var(--text-light);
+  }
+
+
+  .notif {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-80px);
+    background: rgba(255,248,245,0.9);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,240,235,0.5);
+    border-radius: 50px;
+    padding: 10px 24px;
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 14px;
+    color: var(--text);
+    box-shadow: 0 4px 20px var(--shadow);
+    transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    z-index: 100;
+  }
+
+  .notif.show {
+    transform: translateX(-50%) translateY(0);
+  }
+</style>
+</head>
+<body>
+
+<div class="blob blob1"></div>
+<div class="blob blob2"></div>
+<div class="blob blob3"></div>
+
+<div class="notif" id="notif">✦ time to rest, dear</div>
+
+<div class="card" id="card">
+
+  <div class="modes">
+    <button class="mode-btn active" data-mode="pomodoro" data-minutes="25">Focus</button>
+    <button class="mode-btn" data-mode="short" data-minutes="5">Short break</button>
+    <button class="mode-btn" data-mode="long" data-minutes="15">Long break</button>
+  </div>
+
+  <div class="session-label" id="sessionLabel">ready to begin</div>
+
+  <div class="ring-wrap">
+    <svg width="200" height="200" viewBox="0 0 200 200">
+      <circle class="ring-bg-circle" cx="100" cy="100" r="88"/>
+      <circle class="ring-fill-circle" id="ring" cx="100" cy="100" r="88"
+        stroke-dasharray="552.92" stroke-dashoffset="0"/>
+    </svg>
+    <div class="time-display">
+      <div class="time" id="timeDisplay">25:00</div>
+      <div class="session-count" id="sessionCount">session 1 of 4</div>
+    </div>
+  </div>
+
+  <div class="session-dots" id="sessionDots">
+    <div class="dot" id="d1"></div>
+    <div class="dot" id="d2"></div>
+    <div class="dot" id="d3"></div>
+    <div class="dot" id="d4"></div>
+  </div>
+
+  <div class="duration-wrap">
+    <span class="duration-label">duration</span>
+    <div class="duration-editor">
+      <button class="dur-btn" id="durDown">−</button>
+      <input class="dur-input" id="durInput" type="number" min="1" max="90" value="25">
+      <span class="dur-min">min</span>
+      <button class="dur-btn" id="durUp">+</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn-icon" id="resetBtn" title="Reset">↺</button>
+    <button class="btn-main" id="startBtn">Start</button>
+    <button class="btn-icon" id="skipBtn" title="Skip">→</button>
+  </div>
+
+  <div class="quote" id="quote">it's perpetually your life, for better or worse. what do you want from this life?</div>
+
+</div>
+
+<script>
+const MODES = {
+  pomodoro: { minutes: 25, label: 'in focus', breakLabel: 'time to breathe' },
+  short: { minutes: 5, label: 'resting gently', breakLabel: '' },
+  long: { minutes: 15, label: 'a longer rest', breakLabel: '' }
+};
+
+
+
+const CIRCUMFERENCE = 2 * Math.PI * 88;
+
+let mode = 'pomodoro';
+let totalSeconds = 25 * 60;
+let remaining = totalSeconds;
+let running = false;
+let interval = null;
+let sessionsCompleted = 0;
+let totalSessions = 4;
+
+const timeDisplay = document.getElementById('timeDisplay');
+const sessionLabel = document.getElementById('sessionLabel');
+const sessionCount = document.getElementById('sessionCount');
+const ring = document.getElementById('ring');
+const startBtn = document.getElementById('startBtn');
+const resetBtn = document.getElementById('resetBtn');
+const skipBtn = document.getElementById('skipBtn');
+const quoteEl = document.getElementById('quote');
+const card = document.getElementById('card');
+const notif = document.getElementById('notif');
+const dots = [document.getElementById('d1'), document.getElementById('d2'), document.getElementById('d3'), document.getElementById('d4')];
+
+function formatTime(s) {
+  const m = Math.floor(s / 60).toString().padStart(2, '0');
+  const sec = (s % 60).toString().padStart(2, '0');
+  return `${m}:${sec}`;
+}
+
+function updateRing() {
+  const progress = remaining / totalSeconds;
+  const offset = CIRCUMFERENCE * (1 - progress);
+  ring.style.strokeDashoffset = offset;
+}
+
+function updateDots() {
+  dots.forEach((d, i) => {
+    d.classList.toggle('filled', i < sessionsCompleted);
+  });
+}
+
+function updateDisplay() {
+  timeDisplay.textContent = formatTime(remaining);
+  updateRing();
+}
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === m);
+  });
+  totalSeconds = (customDurations[m] || MODES[m].minutes) * 60;
+  remaining = totalSeconds;
+  durInput.value = customDurations[m] || MODES[m].minutes;
+  running = false;
+  clearInterval(interval);
+  startBtn.textContent = 'Start';
+  document.body.classList.remove('running');
+  document.body.classList.toggle('break-mode', m !== 'pomodoro');
+  sessionLabel.textContent = m === 'pomodoro' ? 'ready to begin' : MODES[m].label;
+  updateDisplay();
+}
+
+function showNotif(msg) {
+  notif.textContent = msg;
+  notif.classList.add('show');
+  setTimeout(() => notif.classList.remove('show'), 3000);
+}
+
+
+
+function tick() {
+  remaining--;
+  updateDisplay();
+  if (remaining <= 0) {
+    clearInterval(interval);
+    running = false;
+    startBtn.textContent = 'Start';
+    document.body.classList.remove('running');
+    card.classList.add('ding');
+    setTimeout(() => card.classList.remove('ding'), 600);
+    if (mode === 'pomodoro') {
+      sessionsCompleted = Math.min(sessionsCompleted + 1, 4);
+      updateDots();
+      sessionCount.textContent = `session ${Math.min(sessionsCompleted + 1, 4)} of 4`;
+      sessionLabel.textContent = MODES.pomodoro.breakLabel;
+      showNotif('✦ session complete — you deserve a rest');
+      if (sessionsCompleted >= 4) {
+        sessionsCompleted = 0;
+        updateDots();
+        showNotif('✦ four sessions — long break time, love');
+      }
+    } else {
+      sessionLabel.textContent = 'break complete — ready?';
+      showNotif('✦ back to the work, gently');
+    }
+  }
+}
+
+const durInput = document.getElementById('durInput');
+const durDown = document.getElementById('durDown');
+const durUp = document.getElementById('durUp');
+
+// Per-mode custom durations (in minutes)
+const customDurations = { pomodoro: 25, short: 5, long: 15 };
+
+function applyDuration(minutes) {
+  const clamped = Math.max(1, Math.min(90, minutes));
+  customDurations[mode] = clamped;
+  durInput.value = clamped;
+  totalSeconds = clamped * 60;
+  remaining = totalSeconds;
+  clearInterval(interval);
+  running = false;
+  startBtn.textContent = 'Start';
+  document.body.classList.remove('running');
+  sessionLabel.textContent = 'ready to begin';
+  updateDisplay();
+}
+
+durInput.addEventListener('change', () => applyDuration(parseInt(durInput.value) || 1));
+durInput.addEventListener('keydown', e => { if (e.key === 'Enter') durInput.blur(); });
+durDown.addEventListener('click', () => applyDuration(customDurations[mode] - 1));
+durUp.addEventListener('click', () => applyDuration(customDurations[mode] + 1));
+
+
+  if (running) {
+    clearInterval(interval);
+    running = false;
+    startBtn.textContent = 'Resume';
+    document.body.classList.remove('running');
+    sessionLabel.textContent = 'paused';
+  } else {
+    if (remaining === 0) {
+      remaining = totalSeconds;
+      updateDisplay();
+    }
+    running = true;
+    startBtn.textContent = 'Pause';
+    document.body.classList.add('running');
+    sessionLabel.textContent = MODES[mode].label || 'in focus';
+    interval = setInterval(tick, 1000);
+  }
+});
+
+resetBtn.addEventListener('click', () => {
+  clearInterval(interval);
+  running = false;
+  startBtn.textContent = 'Start';
+  document.body.classList.remove('running');
+  remaining = totalSeconds;
+  sessionLabel.textContent = 'ready to begin';
+  updateDisplay();
+});
+
+skipBtn.addEventListener('click', () => {
+  clearInterval(interval);
+  running = false;
+  remaining = 0;
+  updateDisplay();
+  tick();
+});
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    clearInterval(interval);
+    setMode(btn.dataset.mode);
+    sessionCount.textContent = mode === 'pomodoro' ? `session ${sessionsCompleted + 1} of 4` : '';
+  });
+});
+
+updateDisplay();
+updateDots();
+</script>
+</body>
+</html>
